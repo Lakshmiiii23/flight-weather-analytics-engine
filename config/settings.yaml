@@ -1,0 +1,88 @@
+# ==============================================================================
+# ECO-FRIENDLY HYBRID FLIGHT-WEATHER ANALYTICS ENGINE CONFIGURATION
+# Optimized for GCP Always-Free Tier & Cloudflare R2 Zero-Egress Storage
+# ==============================================================================
+
+pipeline:
+  environment: "production"
+  service_name: "flight-weather-engine"
+  run_interval_seconds: 600
+  log_level: "INFO"
+
+gcp:
+  project_id: "flight-weather-free-tier"
+  dataset_id: "flight_weather_analytics"
+  gcs_bucket_landing: "flights-bronze-landing"
+  location: "US"
+
+duckdb:
+  max_memory: "350MB"
+  threads: 2
+  temp_directory: ".duckdb_temp"
+  geohash_precision: 4
+
+opensky:
+  base_url: "https://opensky-network.org/api"
+  states_endpoint: "/states/all"
+  request_timeout_seconds: 15
+  max_retries: 5
+  backoff_multiplier: 2
+  min_backoff_seconds: 2
+  max_backoff_seconds: 60
+  rate_limit_cooldown_seconds: 15
+  bounding_box:
+    active_preset: "us_northeast_corridor"
+    presets:
+      us_northeast_corridor:
+        lamin: 38.0
+        lamax: 45.0
+        lomin: -79.0
+        lomax: -71.0
+      europe_central:
+        lamin: 45.0
+        lamax: 55.0
+        lomin: 2.0
+        lomax: 15.0
+      global_unbounded:
+        lamin: null
+        lamax: null
+        lomin: null
+        lomax: null
+
+weather:
+  base_url: "https://api.open-meteo.com/v1/forecast"
+  request_timeout_seconds: 15
+  max_retries: 5
+  backoff_multiplier: 2
+  min_backoff_seconds: 2
+  max_backoff_seconds: 30
+  batch_chunk_size: 50
+  required_parameters:
+    - "temperature_2m"
+    - "relative_humidity_2m"
+    - "precipitation"
+    - "wind_speed_10m"
+    - "wind_direction_10m"
+    - "wind_gusts_10m"
+    - "cloud_cover"
+    - "visibility"
+
+bigquery_tables:
+  silver_table: "silver_flight_weather_telemetry"
+  gold_kpi_table: "gold_delay_weather_matrix"
+  audit_table: "cloud_archive_audit_logs"
+  partition_expiration_days: 14
+
+archival:
+  retention_days_cloud: 7
+  compression_algorithm: "zstd"
+  compression_level: 9
+  r2_bucket_name: "flight-weather-cold-archive"
+  r2_endpoint_url: "https://r2.cloudflarestorage.com"
+  local_archive_dir: "archive/parquet"
+
+monitoring:
+  webhook_url: ""
+  alert_on_failure: true
+  alert_on_archival: true
+  heartbeat_enabled: true
