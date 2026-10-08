@@ -307,14 +307,14 @@ def main() -> None:
             "convective_risk_score", "precipitation_mm", "wind_gusts_mps", "geohash"
         ]
         available_cols = [c for c in display_cols if c in filtered_df.columns]
-        st.dataframe(filtered_df[available_cols], use_container_width=True)
+        st.dataframe(filtered_df[available_cols], width="stretch")
 
     # Row 5: Archival Audit Trail Tab
     if not audit_df.empty:
         st.divider()
         st.subheader("📜 Zero-Dollar Cloud Archival & Cryptographic Audit Ledger")
         st.caption("Verified immutable records of partitions evicted from BigQuery to Cloudflare R2.")
-        st.dataframe(audit_df, use_container_width=True)
+        st.dataframe(audit_df, width="stretch")
 
 
 if __name__ == "__main__":
