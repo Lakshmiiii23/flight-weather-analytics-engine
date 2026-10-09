@@ -1,13 +1,3 @@
----
-title: Flight Engine Analytics Node
-emoji: 🚀
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-app_port: 7860
-pinned: false
----
-
 # 🛫 Eco-Friendly Hybrid Flight-Weather Analytics Engine
 
 

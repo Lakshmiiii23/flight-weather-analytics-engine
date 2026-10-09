@@ -78,6 +78,8 @@ def main() -> None:
     parser.add_argument("--init-schema", action="store_true", help="Provision tables and indices in Neon")
     parser.add_argument("--dry-run", action="store_true", help="Run ingestion and join without writing to Neon")
     parser.add_argument("--once", action="store_true", help="Execute single cycle and exit")
+    parser.add_argument("--continuous", action="store_true", help="Force continuous loop mode even in CI")
+    parser.add_argument("--max-cycles", type=int, default=None, help="Maximum number of cycles before exiting")
     parser.add_argument("--interval", type=int, default=600, help="Polling interval in seconds (default: 600)")
     parser.add_argument("--database-url", type=str, default=None, help="Explicit Neon connection string")
 
@@ -93,16 +95,27 @@ def main() -> None:
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8")
 
+    is_ci_env = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CI") == "true"
+
     neon_mgr = None
     if not args.dry_run:
         neon_mgr = NeonPostgresManager(database_url=args.database_url, settings=settings)
-        if args.init_schema:
+        if args.init_schema or is_ci_env:
             print("[SCHEMA] Provisioning Neon PostgreSQL tables and indices...")
             neon_mgr.initialize_schema()
             print("[SUCCESS] Schema successfully initialized in Neon!")
 
-    print(f"[RUNNER] Starting Neon sync runner (Interval: {args.interval}s, Dry-run: {args.dry_run})...")
+    max_cycles = args.max_cycles
+    if max_cycles is None and is_ci_env and not args.continuous:
+        max_cycles = int(os.environ.get("MAX_CYCLES", 1))
+
+    print(
+        f"[RUNNER] Starting Neon sync runner (Interval: {args.interval}s, "
+        f"Dry-run: {args.dry_run}, Max-cycles: {max_cycles or 'infinite'})..."
+    )
+    cycle_count = 0
     while True:
+        cycle_count += 1
         try:
             run_neon_cycle(
                 settings=settings,
@@ -115,11 +128,12 @@ def main() -> None:
         except Exception as exc:
             logger.error("Error during Neon sync iteration", exc_info=True)
 
-        if args.once or args.dry_run:
+        if args.once or args.dry_run or (max_cycles is not None and cycle_count >= max_cycles):
             break
 
         print(f"[WAIT] Sleeping {args.interval}s until next cycle...")
         time.sleep(args.interval)
+
 
 
 if __name__ == "__main__":
