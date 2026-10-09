@@ -171,3 +171,4 @@ class OpenSkyClient:
             },
         )
         return cleaned_records
+

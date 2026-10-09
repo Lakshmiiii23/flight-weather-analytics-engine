@@ -134,6 +134,33 @@ def fetch_bigquery_lakehouse_data(settings: AppSettings) -> Tuple[pd.DataFrame, 
         return pd.DataFrame(), pd.DataFrame()
 
 
+def fetch_neon_lakehouse_data(settings: AppSettings) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Queries Neon PostgreSQL silver telemetry and audit logs tables."""
+    try:
+        from src.storage.neon_manager import NeonPostgresManager
+        neon_mgr = NeonPostgresManager(settings=settings)
+        silver_rows = neon_mgr.query_records(
+            "SELECT * FROM silver_flight_weather_telemetry ORDER BY weather_recorded_at DESC LIMIT 2000;"
+        )
+        audit_rows = neon_mgr.query_records(
+            "SELECT * FROM cloud_archive_audit_logs ORDER BY archival_timestamp DESC LIMIT 50;"
+        )
+        silver_df = pd.DataFrame(silver_rows)
+        audit_df = pd.DataFrame(audit_rows)
+
+        if not silver_df.empty:
+            silver_df["color"] = silver_df["convective_risk_score"].apply(calculate_risk_color)
+            silver_df["hazard_category"] = silver_df.apply(categorize_hazard, axis=1)
+            silver_df["velocity_deficit_pct"] = silver_df["velocity_mps"].apply(
+                lambda v: round(((230.0 - v) / 230.0) * 100.0, 2) if v and v > 0 else 0.0
+            )
+
+        return silver_df, audit_df
+    except Exception as exc:
+        logger.warning("Neon cloud query failed; fallback will be used", exc_info=True)
+        return pd.DataFrame(), pd.DataFrame()
+
+
 def build_pydeck_3d_map(df: pd.DataFrame) -> pdk.Deck:
     """Builds interactive 3D PyDeck visualization of aircraft vectors and weather cells."""
     if df.empty:
@@ -214,7 +241,7 @@ def main() -> None:
 
     data_source_mode = st.sidebar.radio(
         "Data Source Mode",
-        ["Live Stream (Real-Time API)", "BigQuery Cloud Lakehouse"],
+        ["Live Stream (Real-Time API)", "Neon Serverless PostgreSQL", "BigQuery Cloud Lakehouse"],
     )
 
     convective_filter = st.sidebar.slider(
@@ -236,7 +263,13 @@ def main() -> None:
 
     # Data Retrieval
     with st.spinner("Streaming & correlating live telemetry..."):
-        if data_source_mode == "BigQuery Cloud Lakehouse":
+        if data_source_mode == "Neon Serverless PostgreSQL":
+            df, audit_df = fetch_neon_lakehouse_data(settings)
+            if df.empty:
+                st.info("No records found in Neon PostgreSQL. Falling back to real-time live API stream.")
+                df = fetch_live_stream_snapshot(settings, opensky_client, weather_client, spatial_engine)
+                audit_df = pd.DataFrame()
+        elif data_source_mode == "BigQuery Cloud Lakehouse":
             df, audit_df = fetch_bigquery_lakehouse_data(settings)
             if df.empty:
                 st.info("No records found in active BigQuery partition. Falling back to real-time live API stream.")
