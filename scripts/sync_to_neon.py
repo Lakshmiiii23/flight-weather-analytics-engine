@@ -6,6 +6,7 @@ Supports automatic table provisioning, micro-batch streaming, and dry-run valida
 import argparse
 from datetime import datetime, timezone
 import logging
+import os
 from pathlib import Path
 import sys
 import time
