@@ -24,7 +24,7 @@ def test_url_normalization_postgres_prefix(monkeypatch: pytest.MonkeyPatch):
         NeonPostgresManager(database_url=raw_url)
         mock_engine.assert_called_once()
         called_url = mock_engine.call_args[0][0]
-        assert called_url.startswith("postgresql://")
+        assert called_url.startswith("postgresql+psycopg2://")
 
 
 def test_initialize_schema_executes_ddl():

@@ -21,8 +21,13 @@ from tenacity import (
     wait_exponential,
 )
 
+from dotenv import load_dotenv
+
 from config.logging_config import setup_logging
 from config.settings import AppSettings, load_settings
+
+load_dotenv()
+
 
 logger: logging.Logger = setup_logging(
     log_level="INFO", service_name="neon-database-manager"
@@ -53,9 +58,11 @@ class NeonPostgresManager:
                     "NEON_DATABASE_URL is not configured! Please set it in your .env file or environment."
                 )
 
-            # Normalize URI scheme for SQLAlchemy compatibility
+            # Normalize URI scheme for SQLAlchemy compatibility (use installed psycopg2 driver)
             if raw_url.startswith("postgres://"):
-                raw_url = raw_url.replace("postgres://", "postgresql://", 1)
+                raw_url = raw_url.replace("postgres://", "postgresql+psycopg2://", 1)
+            elif raw_url.startswith("postgresql://") and not raw_url.startswith("postgresql+"):
+                raw_url = raw_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
             self.engine = sa.create_engine(
                 raw_url,

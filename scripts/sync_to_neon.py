@@ -88,15 +88,20 @@ def main() -> None:
     weather = OpenMeteoClient(settings=settings)
     spatial = SpatialCorrelationEngine(settings=settings)
 
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+
     neon_mgr = None
     if not args.dry_run:
         neon_mgr = NeonPostgresManager(database_url=args.database_url, settings=settings)
         if args.init_schema:
-            print("📦 Provisioning Neon PostgreSQL tables and indices...")
+            print("[SCHEMA] Provisioning Neon PostgreSQL tables and indices...")
             neon_mgr.initialize_schema()
-            print("✅ Schema successfully initialized in Neon!")
+            print("[SUCCESS] Schema successfully initialized in Neon!")
 
-    print(f"🚀 Starting Neon sync runner (Interval: {args.interval}s, Dry-run: {args.dry_run})...")
+    print(f"[RUNNER] Starting Neon sync runner (Interval: {args.interval}s, Dry-run: {args.dry_run})...")
     while True:
         try:
             run_neon_cycle(
@@ -113,7 +118,7 @@ def main() -> None:
         if args.once or args.dry_run:
             break
 
-        print(f"⏳ Sleeping {args.interval}s until next cycle...")
+        print(f"[WAIT] Sleeping {args.interval}s until next cycle...")
         time.sleep(args.interval)
 
 
