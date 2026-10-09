@@ -4,11 +4,16 @@ import pandas as pd
 import pydeck as pdk
 import pytest
 
+from unittest.mock import patch, MagicMock
+
 from src.dashboard.app import (
     build_pydeck_3d_map,
     calculate_risk_color,
     categorize_hazard,
+    is_sync_worker_alive,
+    start_background_sync_worker,
 )
+
 
 
 def test_calculate_risk_color():
@@ -91,3 +96,19 @@ def test_build_pydeck_3d_map_empty_df():
     deck = build_pydeck_3d_map(pd.DataFrame())
     assert isinstance(deck, pdk.Deck)
     assert len(deck.layers) == 0
+
+
+def test_start_background_sync_worker_idempotence():
+    """Verify background worker launch returns boolean and handles double invocation safely."""
+    with patch("threading.Thread") as mock_thread_cls:
+        mock_thread = MagicMock()
+        mock_thread_cls.return_value = mock_thread
+
+        # First invocation starts the thread
+        res1 = start_background_sync_worker(interval_seconds=600)
+        assert res1 is True
+
+        # Second invocation is an idempotent no-op
+        res2 = start_background_sync_worker(interval_seconds=600)
+        assert res2 is True
+

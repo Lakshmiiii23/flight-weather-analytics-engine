@@ -13,6 +13,14 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
+import os
+import subprocess
+import threading
+import time
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # Ensure repository root is on sys.path
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -29,6 +37,74 @@ from src.storage.bigquery_manager import BigQueryManager
 logger: logging.Logger = setup_logging(
     log_level="INFO", service_name="analytics-dashboard-ui"
 )
+
+_BACKGROUND_WORKER_LOCK = threading.Lock()
+_BACKGROUND_WORKER_STARTED = False
+
+
+def is_sync_worker_alive() -> bool:
+    """Checks whether the background 24/7 sync supervisor thread is active."""
+    return any(t.name == "NeonSyncSupervisorThread" and t.is_alive() for t in threading.enumerate())
+
+
+def start_background_sync_worker(interval_seconds: int = 600) -> bool:
+    """Initializes a concurrent 24/7 background telemetry sync worker.
+
+    Continuously executes scripts/sync_to_neon.py in a dedicated subprocess to ingest
+    ADS-B flight vectors and correlate atmospheric weather directly into Neon PostgreSQL.
+    Provides self-healing automatic restarts in Hugging Face Spaces.
+    """
+    global _BACKGROUND_WORKER_STARTED
+    with _BACKGROUND_WORKER_LOCK:
+        if _BACKGROUND_WORKER_STARTED or is_sync_worker_alive():
+            return True
+        _BACKGROUND_WORKER_STARTED = True
+
+    sync_script = _REPO_ROOT / "scripts" / "sync_to_neon.py"
+    if not sync_script.exists():
+        logger.warning("Background sync script not found at %s", sync_script)
+        return False
+
+    def _supervisor() -> None:
+        logger.info("Initializing 24/7 Neon sync background supervisor...")
+        while True:
+            try:
+                cmd = [
+                    sys.executable,
+                    str(sync_script),
+                    "--init-schema",
+                    f"--interval={interval_seconds}",
+                ]
+                logger.info("Spawning background sync subprocess: %s", " ".join(cmd))
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                )
+                if proc.stdout:
+                    for line in proc.stdout:
+                        clean_line = line.strip()
+                        if clean_line:
+                            logger.info("[NeonSyncWorker] %s", clean_line)
+                proc.wait()
+                logger.warning(
+                    "Neon sync worker terminated (code: %s). Self-healing restart in 30 seconds...",
+                    proc.returncode,
+                )
+            except Exception as exc:
+                logger.error("Error in background sync supervisor: %s", exc, exc_info=True)
+            time.sleep(30)
+
+    thread = threading.Thread(
+        target=_supervisor,
+        name="NeonSyncSupervisorThread",
+        daemon=True,
+    )
+    thread.start()
+    logger.info("Background Neon sync worker thread successfully launched.")
+    return True
 
 
 def calculate_risk_color(score: float) -> List[int]:
@@ -223,6 +299,9 @@ def build_pydeck_3d_map(df: pd.DataFrame) -> pdk.Deck:
 
 def main() -> None:
     """Main Streamlit application layout and event handlers."""
+    # Initialize 24/7 background telemetry sync worker (idempotent / self-healing)
+    start_background_sync_worker()
+
     st.set_page_config(
         page_title="Flight-Weather Lakehouse Analytics",
         page_icon="🛫",
@@ -237,7 +316,12 @@ def main() -> None:
 
     # Sidebar Controls
     st.sidebar.title("🛫 Engine Controls")
-    st.sidebar.caption("GCP Always-Free Lakehouse Monitor")
+    st.sidebar.caption("GCP / Hugging Face 24/7 Lakehouse Node")
+
+    if is_sync_worker_alive():
+        st.sidebar.success("🟢 24/7 Neon Engine: Streaming Active")
+    else:
+        st.sidebar.info("⚪ 24/7 Neon Engine: Initializing...")
 
     data_source_mode = st.sidebar.radio(
         "Data Source Mode",

@@ -1,4 +1,15 @@
+---
+title: Flight Engine Analytics Node
+emoji: 🚀
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # 🛫 Eco-Friendly Hybrid Flight-Weather Analytics Engine
+
 
 A production-grade, streaming/micro-batch Lakehouse engine correlating live commercial flight vectors with localized atmospheric weather. Built to operate **100% perpetually free** using **Google Cloud Platform (GCP) Always-Free Tier** and **Cloudflare R2** zero-egress cold storage with automated cryptographic eviction.
 
