@@ -89,3 +89,67 @@ def test_unconfigured_webhook_suppresses_dispatch(mock_session: MagicMock):
     result = dispatcher.send_heartbeat({"raw_flights": 10})
     assert result is False
     mock_session.post.assert_not_called()
+
+
+def test_discord_webhook_url_env_resolution(monkeypatch: pytest.MonkeyPatch):
+    """Verify WebhookAlertDispatcher respects DISCORD_WEBHOOK_URL environment variable."""
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/test-discord-env")
+    dispatcher = WebhookAlertDispatcher()
+    assert dispatcher.webhook_url == "https://discord.com/api/webhooks/test-discord-env"
+    assert dispatcher.enabled is True
+
+
+def test_send_discord_success_alert(monkeypatch: pytest.MonkeyPatch):
+    """Verify send_discord_success_alert sends markdown and embed with silver and gold stats."""
+    from unittest.mock import patch
+    from scripts.sync_to_neon import send_discord_success_alert
+
+    with patch("requests.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 204
+        mock_resp.raise_for_status.return_value = None
+        mock_post.return_value = mock_resp
+
+        success = send_discord_success_alert(
+            webhook_url="https://discord.com/api/webhooks/mocked",
+            timestamp="2026-10-10 12:00:00 UTC",
+            total_silver=1023,
+            total_gold=440,
+            duration_seconds=12.45,
+        )
+
+        assert success is True
+        mock_post.assert_called_once()
+        payload = mock_post.call_args[1]["json"]
+        assert "🟢 **Flight-Weather Pipeline Success**" in payload["content"]
+        assert "1,023" in payload["content"]
+        assert "440" in payload["content"]
+        assert payload["embeds"][0]["color"] == 3066993
+
+
+def test_send_discord_failure_alert(monkeypatch: pytest.MonkeyPatch):
+    """Verify send_discord_failure_alert sends red alert warning with traceback."""
+    from unittest.mock import patch
+    from scripts.sync_to_neon import send_discord_failure_alert
+
+    with patch("requests.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 204
+        mock_resp.raise_for_status.return_value = None
+        mock_post.return_value = mock_resp
+
+        err = requests.exceptions.HTTPError("429 Client Error: Too Many Requests")
+        success = send_discord_failure_alert(
+            webhook_url="https://discord.com/api/webhooks/mocked",
+            error=err,
+            traceback_str="Traceback (most recent call last):\n  File 'test.py', line 10\n    raise err",
+            timestamp="2026-10-10 12:00:00 UTC",
+        )
+
+        assert success is True
+        mock_post.assert_called_once()
+        payload = mock_post.call_args[1]["json"]
+        assert "❌ **Flight Ingestion Daemon Failure Alert**" in payload["content"]
+        assert "HTTPError" in payload["content"]
+        assert payload["embeds"][0]["color"] == 15158332
+

@@ -32,4 +32,6 @@ jobs:
       - name: Run Telemetry Sync to Neon PostgreSQL
         env:
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python scripts/sync_to_neon.py
+

@@ -38,6 +38,7 @@ class WebhookAlertDispatcher:
         self.settings: AppSettings = settings or load_settings()
         self.webhook_url: str = (
             webhook_url
+            or os.environ.get("DISCORD_WEBHOOK_URL")
             or os.environ.get("WEBHOOK_URL")
             or self.settings.monitoring.webhook_url
         )
